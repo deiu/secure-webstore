@@ -39,6 +39,7 @@
   "scripts": {
     "build": "tsup",
     "prepare": "tsup",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
