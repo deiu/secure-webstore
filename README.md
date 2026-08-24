@@ -15,64 +15,63 @@ Huge thanks to [@Jopie64](https://github.com/Jopie64) for Typescriptifying the s
 
 ## Upgrading from 1.3.7
 
-Two changes need you to act, and one long standing bug is fixed.
+Two changes need your attention. One old bug is also fixed.
 
-### Fixed: `destroy()` never resolved
+### Breaking: close() returns a promise
 
-`destroy()` used to hang forever. Three defects combined:
-
-- The `Store` constructor started opening the database without awaiting it, and
-  the first operation opened it again before that finished. Two connections
-  opened, only one was tracked, and the untracked one held the database open.
-- `destroy()` did not wait for the close before asking for the delete.
-- Closing did not forget the connection. `IDBDatabase.close()` fires no
-  `onclose` event, so the store kept a closed connection and every later call
-  threw `InvalidStateError`.
-
-That last one also made the page-freeze handler a one way door: freeze the page
-and the store was dead. Both are fixed, so a store reopens on demand after a
-close or a freeze.
-
-### Breaking: `close()` now returns a promise
-
-It used to close synchronously and return nothing.
+Before, `close()` closed the connection immediately and returned nothing.
 
 ```diff
 - store.close()
-- doSomethingThatNeedsTheConnectionClosed()
+- doWorkThatNeedsTheConnectionClosed()
 + await store.close()
-+ doSomethingThatNeedsTheConnectionClosed()
++ doWorkThatNeedsTheConnectionClosed()
 ```
 
-Awaiting it was always safe, so code that already awaited is unaffected.
+Code that already awaited `close()` is not affected.
 
-### Breaking: the `<script>` tag bundle moved
+### Breaking: the script tag bundle moved
 
-The build moved from webpack to tsup, and with it the browser bundle.
-`dist/cjs/secure-webstore.js` used to be a UMD bundle that set a `SecureStore`
-global. It is now plain CommonJS and fails in a `<script>` tag. The browser
-bundle is `dist/secure-webstore.global.js`.
+`dist/cjs/secure-webstore.js` was a UMD bundle. It set a `SecureStore` global.
+After the move to tsup it is plain CommonJS, and it fails in a `<script>` tag.
+
+Use `dist/secure-webstore.global.js`.
 
 ```diff
 - <script src="https://cdn.jsdelivr.net/npm/secure-webstore/dist/cjs/secure-webstore.js"></script>
 + <script src="https://cdn.jsdelivr.net/npm/secure-webstore/dist/secure-webstore.global.js"></script>
 ```
 
-A page that pins a version keeps working. Importing through npm is unaffected.
+A page that pins a version continues to work. npm users are not affected.
 
-### Also worth knowing
+### Fixed: destroy() never resolved
 
-`destroy()` now rejects with a clear message when another connection blocks the
-delete, instead of hanging. The store no longer assumes a `window`, so it works
-off the main thread and under a test runner.
+`destroy()` used to wait for ever. Three faults caused it:
 
-### Also in this release
+- The `Store` constructor opened the database without an await. The first
+  operation then opened it again. Two connections opened, the code tracked one,
+  and the other kept the database open. The delete request stayed blocked, and no
+  handler reported it.
+- `destroy()` did not wait for the close before it asked for the delete.
+- The close did not forget the connection. `IDBDatabase.close()` sends no
+  `onclose` event. Thus the store kept a closed connection, and each later call
+  threw `InvalidStateError`.
 
-Sources build to ESM, CJS and a browser bundle, each with its own declarations.
-Tests run under vitest with `fake-indexeddb`, so they need no browser, and line
-coverage of `src` went from 79.8% to 93.4%. CI typechecks, builds and tests
-every push and pull request. `dist/` is no longer committed; a `prepare` script
-builds it for `npm publish` and for an install from the git url.
+The last fault also made the page freeze handler permanent. If the page froze,
+the store stopped working.
+
+All three are fixed. A store opens again when you use it. `destroy()` now rejects
+with a clear message if another connection blocks the delete.
+
+### Other changes
+
+The store no longer needs a `window`. It thus works off the main thread and under
+a test runner. The sources build to ESM, CJS and a browser bundle, and each one
+has its own declarations. The tests run under vitest with `fake-indexeddb`, so
+they need no browser. Line coverage of `src` went from 79.8% to 93.4%. CI
+typechecks, builds and tests each push and each pull request. `dist/` is no
+longer in the repository. A `prepare` script builds it for `npm publish` and for
+an install from the git url.
 
 ## Installing
 
