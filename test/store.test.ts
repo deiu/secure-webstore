@@ -222,4 +222,119 @@ describe('Store', function () {
       await store.close();
     });
   });
+
+  describe('Lifecycle', () => {
+    const passphrase = 'password';
+    const data = { foo: 'bar' };
+
+    it('Should refuse to encrypt before init', async () => {
+      const store = new SecStore('lifecycle-uninit', passphrase);
+
+      let err: any;
+      try {
+        await store.set('one', data);
+      } catch (error) {
+        err = error;
+      }
+      assert.equal(err.message, 'Master key not initialized');
+      await store.close();
+    });
+
+    it('Should destroy the database and drop its contents', async () => {
+      const storeName = 'lifecycle-destroy';
+      const store = new SecStore(storeName, passphrase);
+      await store.init();
+      await store.set('one', data);
+      assert.deepEqual(await store.keys(), ['one']);
+
+      await store.destroy();
+
+      // a fresh store on the same name starts empty, which proves the
+      // database was deleted rather than merely closed
+      const reopened = new SecStore(storeName, passphrase);
+      await reopened.init();
+      assert.deepEqual(await reopened.keys(), []);
+      await reopened.close();
+    });
+
+    it('Should close a second connection so destroy is not blocked', async () => {
+      const storeName = 'lifecycle-versionchange';
+      const first = new SecStore(storeName, passphrase);
+      await first.init();
+      await first.set('one', data);
+
+      const second = new SecStore(storeName, passphrase);
+      await second.init();
+
+      // deleteDatabase blocks while another connection is open, so this only
+      // resolves because onversionchange closes the first connection
+      await second.destroy();
+
+      const reopened = new SecStore(storeName, passphrase);
+      await reopened.init();
+      assert.deepEqual(await reopened.keys(), []);
+      await reopened.close();
+    });
+
+    it('Should report a missing IndexedDB implementation on destroy', async () => {
+      const store = new SecStore('lifecycle-no-idb', passphrase);
+      await store.init();
+
+      const real = globalThis.indexedDB;
+      delete (globalThis as any).indexedDB;
+      let err: any;
+      try {
+        await store.destroy();
+      } catch (error) {
+        err = error;
+      } finally {
+        (globalThis as any).indexedDB = real;
+      }
+      assert.equal(err.message, 'IndexedDB is not supported in this environment');
+    });
+
+    it('Should report a missing IndexedDB implementation on open', async () => {
+      const real = globalThis.indexedDB;
+      delete (globalThis as any).indexedDB;
+      let err: any;
+      try {
+        const store = new _idb.Store('lifecycle-no-idb-open', 'lifecycle-no-idb-open');
+        await _idb.get('one', store);
+      } catch (error) {
+        err = error;
+      } finally {
+        (globalThis as any).indexedDB = real;
+      }
+      assert.equal(err.message, 'IndexedDB is not supported in this environment');
+    });
+
+    it('Should close the connection when the page is frozen', async () => {
+      const storeName = 'lifecycle-freeze';
+      const listeners: Record<string, Function[]> = {};
+      const hadWindow = 'window' in globalThis;
+      (globalThis as any).window = {
+        addEventListener: (type: string, cb: Function) => {
+          listeners[type] = listeners[type] || [];
+          listeners[type].push(cb);
+        }
+      };
+
+      try {
+        const store = new SecStore(storeName, passphrase);
+        await store.init();
+        await store.set('one', data);
+
+        assert.lengthOf(listeners.freeze || [], 1, 'init must register one freeze listener');
+        listeners.freeze[0]();
+
+        // the store reopens on demand, so a freeze must not lose data
+        assert.deepEqual(await store.get('one'), data);
+        await store.close();
+      } finally {
+        if (!hadWindow) {
+          delete (globalThis as any).window;
+        }
+      }
+    });
+  });
 });

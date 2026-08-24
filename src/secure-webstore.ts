@@ -99,19 +99,26 @@ class Store {
     return idb.close(this.store)
   }
 
-  destroy () {
+  async destroy () {
+    // the delete request is blocked while this connection is still open, so
+    // the close has to finish first
+    await this.close()
+    const idb = globalThis.indexedDB || (typeof window !== 'undefined' ? window.indexedDB : undefined)
+    if (!idb) {
+      throw new Error('IndexedDB is not supported in this environment')
+    }
     return new Promise((resolve, reject) => {
-      this.close()
-      const idb = globalThis.indexedDB || (typeof window !== 'undefined' ? window.indexedDB : undefined)
-      if (!idb) {
-        throw new Error('IndexedDB is not supported in this environment')
-      }
       const req = idb.deleteDatabase(this.storeName)
       req.onsuccess = (e) => {
         resolve(e)
       }
       req.onerror = (e) => {
         reject(e)
+      }
+      // another tab holding the database open would otherwise hang this
+      // promise for as long as that tab lives
+      req.onblocked = () => {
+        reject(new Error('Cannot delete the database while another connection is open'))
       }
     })
   }

@@ -4,13 +4,12 @@ class Store {
   storeName: string
   private _dbName: string
   private _storeName: string
-  private _dbp?: IDBDatabase
+  private _dbp?: Promise<IDBDatabase>
 
   constructor (dbName = 'keyval-store', storeName = 'keyval') {
     this.storeName = storeName
     this._dbName = dbName
     this._storeName = storeName
-    this._init()
   }
 
   async _withIDBStore <T>(type: IDBTransactionMode, callback: (store: IDBObjectStore) => T): Promise<T> {
@@ -26,37 +25,51 @@ class Store {
     return ret!;
   }
 
-  async _init () {
-    if (this._dbp) {
-      return this._dbp
-    }
-    this._dbp = await new Promise<IDBDatabase>((resolve, reject) => {
-      const idb = globalThis.indexedDB || (typeof window !== 'undefined' ? window.indexedDB : undefined)
-      if (!idb) {
-        throw new Error('IndexedDB is not supported in this environment')
-      }
-      const openreq = idb.open(this._dbName, 1)
-      openreq.onerror = () => reject(openreq.error)
-      openreq.onsuccess = () => resolve(openreq.result)
-      // First time setup: create an empty object store
-      openreq.onupgradeneeded = () => {
-        openreq.result.createObjectStore(this._storeName)
-      }
-    });
-    this._dbp.onclose = () => {
-      this._dbp = undefined
-    }
-    this._dbp.onversionchange = (e) => {
-      if (e.newVersion === null) { // an attempt is made to delete the db
-        console.log('Got delete request for db')
-        this._dbp?.close() // force close our connection to the db
-      }
+  async _init (): Promise<IDBDatabase> {
+    if (!this._dbp) {
+      // assigned before the first await so concurrent callers share one
+      // connection instead of each opening (and leaking) their own
+      this._dbp = new Promise<IDBDatabase>((resolve, reject) => {
+        const idb = globalThis.indexedDB || (typeof window !== 'undefined' ? window.indexedDB : undefined)
+        if (!idb) {
+          throw new Error('IndexedDB is not supported in this environment')
+        }
+        const openreq = idb.open(this._dbName, 1)
+        openreq.onerror = () => reject(openreq.error)
+        openreq.onsuccess = () => resolve(openreq.result)
+        // First time setup: create an empty object store
+        openreq.onupgradeneeded = () => {
+          openreq.result.createObjectStore(this._storeName)
+        }
+      }).then(db => {
+        db.onclose = () => {
+          this._dbp = undefined
+        }
+        db.onversionchange = (e) => {
+          if (e.newVersion === null) { // an attempt is made to delete the db
+            db.close() // force close our connection to the db
+            this._dbp = undefined
+          }
+        }
+        return db
+      })
+      // a failed open must not poison the store for every later call
+      this._dbp.catch(() => { this._dbp = undefined })
     }
     return this._dbp
   }
 
-  _close () {
-    this._dbp?.close()
+  async _close () {
+    const dbp = this._dbp
+    this._dbp = undefined
+    if (!dbp) {
+      return
+    }
+    try {
+      (await dbp).close()
+    } catch {
+      // the connection never opened, so there is nothing to close
+    }
   }
 }
 
