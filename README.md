@@ -23,9 +23,9 @@ npm install --save secure-webstore
 
 ### Via `<script>` tag
 
-Either host `dist/cjs/secure-webstore.js` yourself or use a CDN (e.g. jsDelivr) like this:
+Either host `dist/secure-webstore.global.js` yourself or use a CDN (e.g. jsDelivr) like this:
 ```html
-<script type="application/javascript" src="https://cdn.jsdelivr.net/npm/secure-webstore@1.3.7/dist/cjs/secure-webstore.js"></script>
+<script type="application/javascript" src="https://cdn.jsdelivr.net/npm/secure-webstore@1.3.7/dist/secure-webstore.global.js"></script>
 ```
 *You can then use `window.SecureStore` to access the library.*
 

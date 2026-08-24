@@ -38,8 +38,10 @@
   ],
   "scripts": {
     "build": "tsup",
+    "prepare": "tsup",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "easy-web-crypto": "^1.4.0"
@@ -49,6 +51,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "fake-indexeddb": "^6.2.5",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
