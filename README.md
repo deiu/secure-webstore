@@ -1,6 +1,6 @@
 # Secure-webstore
 
-[![Build Status](https://api.travis-ci.org/AKASHAorg/secure-webstore.svg?branch=master)](https://travis-ci.org/AKASHAorg/secure-webstore)
+[![CI](https://github.com/deiu/secure-webstore/actions/workflows/ci.yml/badge.svg)](https://github.com/deiu/secure-webstore/actions/workflows/ci.yml)
 
 This is a secure, promise-based keyval store that encrypts data stored in IndexedDB.
 
@@ -8,10 +8,70 @@ The symmetric encryption key is derived from the provided passphrase, and then s
 form within the provided store name. The encryption key is only used in memory and never revealed.
 
 The IndexedDB wrapper used internally is [idb-keyval](https://github.com/jakearchibald/idb-keyval/),
-while the cryptographic operations are handled by [easy-web-crypto](https://github.com/AkashaProject/easy-web-crypto),
+while the cryptographic operations are handled by [easy-web-crypto](https://github.com/deiu/easy-web-crypto),
 a zero-dependency wrapper around the [Webcrypto API](https://caniuse.com/#search=web%20crypto) available in modern browsers.
 
 Huge thanks to [@Jopie64](https://github.com/Jopie64) for Typescriptifying the source!
+
+## Upgrading from 1.3.7
+
+Two changes need your attention. One old bug is also fixed.
+
+### Breaking: close() returns a promise
+
+Before, `close()` closed the connection immediately and returned nothing.
+
+```diff
+- store.close()
+- doWorkThatNeedsTheConnectionClosed()
++ await store.close()
++ doWorkThatNeedsTheConnectionClosed()
+```
+
+Code that already awaited `close()` is not affected.
+
+### Breaking: the script tag bundle moved
+
+`dist/cjs/secure-webstore.js` was a UMD bundle. It set a `SecureStore` global.
+After the move to tsup it is plain CommonJS, and it fails in a `<script>` tag.
+
+Use `dist/secure-webstore.global.js`.
+
+```diff
+- <script src="https://cdn.jsdelivr.net/npm/secure-webstore/dist/cjs/secure-webstore.js"></script>
++ <script src="https://cdn.jsdelivr.net/npm/secure-webstore/dist/secure-webstore.global.js"></script>
+```
+
+A page that pins a version continues to work. npm users are not affected.
+
+### Fixed: destroy() never resolved
+
+`destroy()` used to wait for ever. Three faults caused it:
+
+- The `Store` constructor opened the database without an await. The first
+  operation then opened it again. Two connections opened, the code tracked one,
+  and the other kept the database open. The delete request stayed blocked, and no
+  handler reported it.
+- `destroy()` did not wait for the close before it asked for the delete.
+- The close did not forget the connection. `IDBDatabase.close()` sends no
+  `onclose` event. Thus the store kept a closed connection, and each later call
+  threw `InvalidStateError`.
+
+The last fault also made the page freeze handler permanent. If the page froze,
+the store stopped working.
+
+All three are fixed. A store opens again when you use it. `destroy()` now rejects
+with a clear message if another connection blocks the delete.
+
+### Other changes
+
+The store no longer needs a `window`. It thus works off the main thread and under
+a test runner. The sources build to ESM, CJS and a browser bundle, and each one
+has its own declarations. The tests run under vitest with `fake-indexeddb`, so
+they need no browser. Line coverage of `src` went from 79.8% to 93.4%. CI
+typechecks, builds and tests each push and each pull request. `dist/` is no
+longer in the repository. A `prepare` script builds it for `npm publish` and for
+an install from the git url.
 
 ## Installing
 
