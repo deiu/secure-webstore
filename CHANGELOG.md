@@ -7,7 +7,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases made before this file existed are listed under
 [Releases](https://github.com/deiu/secure-webstore/releases).
 
-## [Unreleased]
+## [2.0.0] - 2026-08-30
 
 ### Fixed
 
@@ -51,6 +51,7 @@ Releases made before this file existed are listed under
   on the connection being closed ([#2]).
 - `destroy()` now rejects with `Cannot delete the database while another
   connection is open` instead of hanging when the delete is blocked ([#2]).
+- The `easy-web-crypto` dependency moves to ^2.0.0. Its runtime is unchanged; its types are more precise ([easy-web-crypto 2.0.0](https://github.com/deiu/easy-web-crypto/releases/tag/2.0.0)).
 - The store reopens on demand after a `close()`, because the connection is
   forgotten rather than kept in a closed state ([#2]).
 - **The `<script>` tag bundle moved to `dist/secure-webstore.global.js`.**
@@ -66,3 +67,4 @@ Releases made before this file existed are listed under
 [#1]: https://github.com/deiu/secure-webstore/pull/1
 [#2]: https://github.com/deiu/secure-webstore/pull/2
 [#3]: https://github.com/deiu/secure-webstore/pull/3
+[2.0.0]: https://github.com/deiu/secure-webstore/releases/tag/2.0.0
